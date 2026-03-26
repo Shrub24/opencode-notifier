@@ -421,6 +421,8 @@ This is independent of `command.minDuration`, which only controls whether the cu
 
 **WezTerm panes**: When running in WezTerm with `WEZTERM_PANE` set, focus suppression is pane-aware via `wezterm cli list-clients --format json`. This means notifications are shown when you switch to a different WezTerm pane/tab.
 
+**WezTerm panes**: When running in WezTerm with `WEZTERM_PANE` set, focus suppression is pane-aware via `wezterm cli list-clients --format json`. This means notifications are shown when you switch to a different WezTerm pane/tab.
+
 **Fail-open design**: If detection fails for any reason (missing tools, unknown compositor, permissions), it falls back to always notifying. It never silently eats your notifications.
 
 If you test on a platform marked "Untested" and it works (or doesn't), please open an issue and let us know.
