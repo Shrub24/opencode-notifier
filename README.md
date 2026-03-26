@@ -330,6 +330,8 @@ To disable this and always get notified:
 
 **tmux/screen**: When running inside tmux, the tmux server daemonizes and detaches from the terminal's process tree. The plugin handles this by querying the tmux client PID and walking from there. GNU Screen has the same issue but is not currently handled (falls back to always notifying).
 
+**WezTerm panes**: When running in WezTerm with `WEZTERM_PANE` set, focus suppression is pane-aware via `wezterm cli list-clients --format json`. This means notifications are shown when you switch to a different WezTerm pane/tab.
+
 **Fail-open design**: If detection fails for any reason (missing tools, unknown compositor, permissions), it falls back to always notifying. It never silently eats your notifications.
 
 If you test on a platform marked "Untested" and it works (or doesn't), please open an issue and let us know.
