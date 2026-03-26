@@ -78,6 +78,21 @@ function getSwayActiveWindowId(): string | null {
   }
 }
 
+export function parseWezTermFocusedPaneId(output: string): string | null {
+  try {
+    const data = JSON.parse(output)
+    if (!Array.isArray(data)) return null
+    for (const client of data) {
+      if (typeof client?.focused_pane_id === "number") {
+        return String(client.focused_pane_id)
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function getLinuxWaylandActiveWindowId(): string | null {
   const env = process.env
   if (env.HYPRLAND_INSTANCE_SIGNATURE) return getHyprlandActiveWindowId()
@@ -168,6 +183,16 @@ function getActiveWindowId(): string | null {
 const cachedWindowId: string | null = getActiveWindowId()
 
 const tmuxPane: string | null = process.env.TMUX_PANE ?? null
+const weztermPane: string | null = process.env.WEZTERM_PANE ?? null
+
+function isWezTermPaneActive(): boolean {
+  if (!weztermPane) return true
+  const output = execWithTimeout("wezterm cli list-clients --format json", 1000)
+  if (!output) return false
+  const focusedPaneId = parseWezTermFocusedPaneId(output)
+  if (!focusedPaneId) return false
+  return focusedPaneId === weztermPane
+}
 
 function isTmuxPaneActive(): boolean {
   if (!tmuxPane) return true
@@ -184,6 +209,9 @@ export function isTerminalFocused(): boolean {
       if (!isMacTerminalAppFocused(frontmostAppName, process.env)) {
         return false
       }
+      if (!isWezTermPaneActive()) {
+        return false
+      }
       if (process.env.TMUX) {
         return isTmuxPaneActive()
       }
@@ -193,6 +221,7 @@ export function isTerminalFocused(): boolean {
     if (!cachedWindowId) return false
     const currentId = getActiveWindowId()
     if (currentId !== cachedWindowId) return false
+    if (!isWezTermPaneActive()) return false
     if (process.env.TMUX) return isTmuxPaneActive()
     return true
   } catch {
