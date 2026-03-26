@@ -1,5 +1,5 @@
 import os from "os"
-import { exec, execFile, spawn } from "child_process"
+import { exec, execFile, spawn, execFileSync } from "child_process"
 import notifier from "node-notifier"
 import isWsl from "is-wsl"
 
@@ -136,6 +136,111 @@ async function sendLinuxNotificationWithActions(
     args.push("--replace-id", String(lastLinuxNotificationId))
   }
 
+  args.push("--print-id")
+
+  args.push("--action", `${LINUX_FOCUS_ACTION_KEY}=${LINUX_FOCUS_ACTION_LABEL}`)
+
+  args.push("--", title, message)
+
+  return new Promise((resolve) => {
+    const child = spawn("notify-send", args, { stdio: ["ignore", "pipe", "pipe"] })
+
+    let stdout = ""
+
+    const consumeStdout = () => {
+      const lines = stdout.split(/\r?\n/)
+      stdout = lines.pop() ?? ""
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line) {
+          continue
+        }
+
+        const parsed = parseNotifySendOutputLine(line)
+        if (!parsed) {
+          continue
+        }
+
+        if (parsed.type === "id") {
+          if (grouping) {
+            lastLinuxNotificationId = parsed.id
+          }
+          continue
+        }
+
+        if (onAction) {
+          if (parsed.action === "focus") {
+            onAction("focus")
+          } else if (parsed.action === "close") {
+            onAction("close")
+          }
+        }
+      }
+    }
+
+    child.stdout?.on("data", (data) => {
+      stdout += data.toString()
+      consumeStdout()
+    })
+
+    child.on("close", () => {
+      if (stdout.trim().length > 0) {
+        stdout += "\n"
+        consumeStdout()
+      }
+      resolve()
+    })
+
+    child.on("error", () => {
+      resolve()
+    })
+  })
+}
+
+function sendLinuxInteractiveNotificationDirect(
+  title: string,
+  message: string,
+  timeout: number,
+  iconPath: string | undefined,
+  windowId: string,
+  paneId: string | null
+): Promise<void> {
+  return new Promise((resolve) => {
+    const args: string[] = ["--app-name", "opencode"]
+
+    if (iconPath) {
+      args.push("--icon", iconPath)
+    }
+
+    args.push("--expire-time", String(timeout * 1000), "--wait", "--action", "focus=Focus", "--", title, message)
+
+    execFile("notify-send", args, (error, stdout) => {
+      if (error || stdout.trim() !== "focus") {
+        resolve()
+        return
+      }
+
+      execFile("niri", ["msg", "action", "focus-window", "--id", windowId], () => {
+        if (!paneId) {
+          resolve()
+          return
+        }
+
+        execFile("wezterm", ["cli", "activate-pane", "--pane-id", paneId], () => {
+          resolve()
+        })
+      })
+    })
+  })
+}
+
+  args.push("--expire-time", String(timeout * 1000))
+
+  if (grouping && lastLinuxNotificationId !== null) {
+    args.push("--replace-id", String(lastLinuxNotificationId))
+  }
+
   // Always print ID so we can resolve early (before user clicks)
   // and still keep replace-id working.
   args.push("--print-id")
@@ -198,6 +303,41 @@ async function sendLinuxNotificationWithActions(
 
     child.on("error", () => {
       resolve()
+=======
+function sendLinuxInteractiveNotificationDirect(
+  title: string,
+  message: string,
+  timeout: number,
+  iconPath: string | undefined,
+  windowId: string,
+  paneId: string | null
+): Promise<void> {
+  return new Promise((resolve) => {
+    const args: string[] = ["--app-name", "opencode"]
+
+    if (iconPath) {
+      args.push("--icon", iconPath)
+    }
+
+    args.push("--expire-time", String(timeout * 1000), "--wait", "--action", "focus=Focus", "--", title, message)
+
+    execFile("notify-send", args, (error, stdout) => {
+      if (error || stdout.trim() !== "focus") {
+        resolve()
+        return
+      }
+
+      execFile("niri", ["msg", "action", "focus-window", "--id", windowId], () => {
+        if (!paneId) {
+          resolve()
+          return
+        }
+
+        execFile("wezterm", ["cli", "activate-pane", "--pane-id", paneId], () => {
+          resolve()
+        })
+      })
+>>>>>>> 133a624 (feat: implemented niri + wezterm interactive refocus)
     })
   })
 }
@@ -228,6 +368,23 @@ export function parseNotifySendOutputLine(
   return null
 }
 
+function getNiriFocusedWindowId(): string | null {
+  if (!process.env.NIRI_SOCKET) return null
+  try {
+    const output = execFileSync("niri", ["msg", "--json", "focused-window"], {
+      timeout: 1000,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+    const data = JSON.parse(output)
+    return typeof data?.id === "number" ? String(data.id) : null
+  } catch {
+    return null
+  }
+}
+
+const niriInteractiveWindowId: string | null = getNiriFocusedWindowId()
+const weztermInteractivePaneId: string | null = process.env.WEZTERM_PANE ?? null
 export async function sendNotification(
   title: string,
   message: string,
@@ -235,7 +392,8 @@ export async function sendNotification(
   iconPath?: string,
   notificationSystem: "osascript" | "node-notifier" | "ghostty" = "osascript",
   linuxGrouping: boolean = true,
-  onClick?: () => void
+  onClick?: () => void,
+  linuxInteractive: boolean = false
 ): Promise<void> {
   const now = Date.now()
   if (lastNotificationTime[message] && now - lastNotificationTime[message] < DEBOUNCE_MS) {
@@ -284,6 +442,17 @@ export async function sendNotification(
   }
 
   if ((platform === "Linux" || platform.match(/BSD$/)) && !isWsl) {
+    if (linuxInteractive && niriInteractiveWindowId) {
+      return sendLinuxInteractiveNotificationDirect(
+        title,
+        message,
+        timeout,
+        iconPath,
+        niriInteractiveWindowId,
+        weztermInteractivePaneId
+      )
+    }
+
     if (onClick) {
       if (linuxGrouping) {
         if (linuxNotifySendSupportsReplace === null) {
@@ -294,9 +463,8 @@ export async function sendNotification(
         }
       }
 
-      // Fallback without grouping so action click still works
-      // even when --replace-id is unavailable or disabled.
       return sendLinuxNotificationDirect(title, message, timeout, iconPath, false, () => onClick())
+    }
     }
 
     if (linuxGrouping) {

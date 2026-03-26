@@ -454,6 +454,20 @@ On KDE Plasma/Wayland, clicking the popup body is not consistently delivered as 
 When clicked, the plugin runs its terminal-focus path. On KDE with `kdotool` installed, it auto-captures the startup terminal window ID and jumps back to that pinned window.
 The action button is only enabled on Linux KDE sessions where `kdotool` is available.
 
+## Linux: Interactive notifications (Niri)
+
+Enable clickable notifications that can focus the originating Niri window:
+
+```json
+{
+  "linux": {
+    "interactive": true
+  }
+}
+```
+
+When enabled, notifications include a `Focus` action. Clicking it runs `niri msg action focus-window --id <id>` for the window that produced that notification. If `WEZTERM_PANE` is available, it then runs `wezterm cli activate-pane --pane-id <id>` to restore pane focus. If actions are unsupported by your notification daemon, notifications still show normally.
+
 ## Updating
 
 If Opencode does not update the plugin or there is an issue with the cache version:

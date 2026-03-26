@@ -33,6 +33,7 @@ export interface CommandConfig {
 
 export interface LinuxConfig {
   grouping: boolean
+  interactive: boolean
 }
 
 export interface MessageContext {
@@ -135,6 +136,7 @@ const DEFAULT_CONFIG: NotifierConfig = {
   notificationSystem: "osascript",
   linux: {
     grouping: false,
+    interactive: false,
   },
   minDuration: 0,
   command: {
@@ -306,6 +308,10 @@ export function loadConfig(): NotifierConfig {
             : "osascript",
       linux: {
         grouping: typeof userConfig.linux?.grouping === "boolean" ? userConfig.linux.grouping : DEFAULT_CONFIG.linux.grouping,
+        interactive:
+          typeof userConfig.linux?.interactive === "boolean"
+            ? userConfig.linux.interactive
+            : DEFAULT_CONFIG.linux.interactive,
       },
       minDuration:
         typeof userConfig.minDuration === "number" && Number.isFinite(userConfig.minDuration) && userConfig.minDuration >= 0

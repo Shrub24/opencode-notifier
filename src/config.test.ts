@@ -54,6 +54,7 @@ describe("Config", () => {
     expect(config.showProjectName).toBe(true)
     expect(config.showIcon).toBe(true)
     expect(config.notificationSystem).toBe("osascript")
+    expect(config.linux.interactive).toBe(false)
   })
 
   test("loadConfig parses existing config file", async () => {
@@ -294,6 +295,20 @@ describe("Config", () => {
     const config = loadConfig()
 
     expect(config.minDuration).toBe(10)
+  })
+
+  test("loadConfig parses linux interactive notifications setting", async () => {
+    const testConfig = {
+      linux: {
+        interactive: true,
+      },
+    }
+    writeFileSync(testConfigPath, JSON.stringify(testConfig))
+
+    const { loadConfig } = await import("./config")
+    const config = loadConfig()
+
+    expect(config.linux.interactive).toBe(true)
   })
 
   test("loadConfig rejects negative minDuration", async () => {
