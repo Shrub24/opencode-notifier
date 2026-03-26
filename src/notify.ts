@@ -1,5 +1,5 @@
 import os from "os"
-import { exec, execFile } from "child_process"
+import { exec, execFile, execFileSync } from "child_process"
 import notifier from "node-notifier"
 
 const DEBOUNCE_MS = 1000
@@ -82,13 +82,69 @@ function sendLinuxNotificationDirect(
   })
 }
 
+function sendLinuxInteractiveNotificationDirect(
+  title: string,
+  message: string,
+  timeout: number,
+  iconPath: string | undefined,
+  windowId: string,
+  paneId: string | null
+): Promise<void> {
+  return new Promise((resolve) => {
+    const args: string[] = ["--app-name", "opencode"]
+
+    if (iconPath) {
+      args.push("--icon", iconPath)
+    }
+
+    args.push("--expire-time", String(timeout * 1000), "--wait", "--action", "focus=Focus", "--", title, message)
+
+    execFile("notify-send", args, (error, stdout) => {
+      if (error || stdout.trim() !== "focus") {
+        resolve()
+        return
+      }
+
+      execFile("niri", ["msg", "action", "focus-window", "--id", windowId], () => {
+        if (!paneId) {
+          resolve()
+          return
+        }
+
+        execFile("wezterm", ["cli", "activate-pane", "--pane-id", paneId], () => {
+          resolve()
+        })
+      })
+    })
+  })
+}
+
+function getNiriFocusedWindowId(): string | null {
+  if (!process.env.NIRI_SOCKET) return null
+  try {
+    const output = execFileSync("niri", ["msg", "--json", "focused-window"], {
+      timeout: 1000,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+    const data = JSON.parse(output)
+    return typeof data?.id === "number" ? String(data.id) : null
+  } catch {
+    return null
+  }
+}
+
+const niriInteractiveWindowId: string | null = getNiriFocusedWindowId()
+const weztermInteractivePaneId: string | null = process.env.WEZTERM_PANE ?? null
+
 export async function sendNotification(
   title: string,
   message: string,
   timeout: number,
   iconPath?: string,
   notificationSystem: "osascript" | "node-notifier" | "ghostty" = "osascript",
-  linuxGrouping: boolean = true
+  linuxGrouping: boolean = true,
+  linuxInteractive: boolean = false
 ): Promise<void> {
   const now = Date.now()
   if (lastNotificationTime[message] && now - lastNotificationTime[message] < DEBOUNCE_MS) {
@@ -138,6 +194,17 @@ export async function sendNotification(
   }
 
   if (platform === "Linux" || platform.match(/BSD$/)) {
+    if (linuxInteractive && niriInteractiveWindowId) {
+      return sendLinuxInteractiveNotificationDirect(
+        title,
+        message,
+        timeout,
+        iconPath,
+        niriInteractiveWindowId,
+        weztermInteractivePaneId
+      )
+    }
+
     if (linuxGrouping) {
       if (linuxNotifySendSupportsReplace === null) {
         linuxNotifySendSupportsReplace = await detectNotifySendCapabilities()

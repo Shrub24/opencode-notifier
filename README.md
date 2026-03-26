@@ -355,6 +355,20 @@ With grouping enabled, each new notification replaces the previous one so you on
 
 Works with all major notification daemons (GNOME, dunst, mako, swaync, etc.) on both X11 and Wayland.
 
+## Linux: Interactive notifications (Niri)
+
+Enable clickable notifications that can focus the originating Niri window:
+
+```json
+{
+  "linux": {
+    "interactive": true
+  }
+}
+```
+
+When enabled, notifications include a `Focus` action. Clicking it runs `niri msg action focus-window --id <id>` for the window that produced that notification. If `WEZTERM_PANE` is available, it then runs `wezterm cli activate-pane --pane-id <id>` to restore pane focus. If actions are unsupported by your notification daemon, notifications still show normally.
+
 ## Updating
 
 If Opencode does not update the plugin or there is an issue with the cache version:
